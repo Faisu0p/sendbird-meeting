@@ -86,7 +86,7 @@
       // set the meeting code on the room as a custom item (helps discovery)
       await room.updateCustomItems({ meeting_code: meetingCode });
       // POST to your server so other clients can find the room by meeting code
-      await fetch('/register-room', {
+      await fetch('http://192.168.1.42:3000/register-room, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ meetingCode, roomId: room.roomId })
@@ -96,7 +96,7 @@
     }
 
     async function getRoomIdByCode(meetingCode) {
-      const r = await fetch(`/rooms/by-code/${encodeURIComponent(meetingCode)}`);
+      const r = await fetch(`http://192.168.1.42:3000/rooms/by-code/${encodeURIComponent(meetingCode)}`);
       if (!r.ok) throw new Error('no room');
       return r.json(); // expects { roomId: '...' }
     }
