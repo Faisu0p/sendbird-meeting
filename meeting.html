@@ -86,6 +86,7 @@
 
     // request permissions and prepare media
     async function prepareMedia() {
+      await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       // The SDK recommends calling useMedia which triggers getUserMedia permission.
       try {
         await SendBirdCall.useMedia();
