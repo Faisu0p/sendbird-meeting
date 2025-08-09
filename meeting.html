@@ -16,8 +16,24 @@
 <body>
   <h3>Sendbird Calls — WebView test</h3>
 
-  <label>User ID: <input id="userId" value="user1"></label><br/>
-  <label>Meeting code: <input id="meetingCode" value="TEST123"></label><br/>
+<label>User ID: <input id="userId"></label><br/>
+<label>Meeting code: <input id="meetingCode"></label><br/>
+
+<script>
+  // Read query params from URL
+  const params = new URLSearchParams(location.search);
+  const userIdFromUrl = params.get("userId");
+  const meetingCodeFromUrl = params.get("meetingCode");
+
+  // If present, set them into the inputs
+  if (userIdFromUrl) {
+    document.getElementById('userId').value = userIdFromUrl;
+  }
+  if (meetingCodeFromUrl) {
+    document.getElementById('meetingCode').value = meetingCodeFromUrl;
+  }
+</script>
+
 
   <div class="controls">
     <button id="btnInit">Init & Authenticate</button>
