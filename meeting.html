@@ -102,7 +102,7 @@
       // set the meeting code on the room as a custom item (helps discovery)
       await room.updateCustomItems({ meeting_code: meetingCode });
       // POST to your server so other clients can find the room by meeting code
-      await fetch('https://sendbird-server-lc0z5ujnk-faisalkhan786hi-gmailcoms-projects.vercel.app/register-room, {
+      await fetch('https://sendbird-server-lc0z5ujnk-faisalkhan786hi-gmailcoms-projects.vercel.app/register-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ meetingCode, roomId: room.roomId })
