@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sendbird Calls Web Test</title>
+  <!-- load SendBirdCall from unpkg (or bundle it via your build) -->
+  <script src="https://unpkg.com/sendbird-calls@1.10.19/SendBirdCall.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 12px; }
+    #videos { display:flex; gap:8px; }
+    video { width: 48%; background: #000; }
+    .controls { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h3>Sendbird Calls — WebView test</h3>
+
+  <label>User ID: <input id="userId" value="user1"></label><br/>
+  <label>Meeting code: <input id="meetingCode" value="TEST123"></label><br/>
+
+  <div class="controls">
+    <button id="btnInit">Init & Authenticate</button>
+    <button id="btnCreate">Create room (host)</button>
+    <button id="btnJoin">Join by meeting code</button>
+  </div>
+
+  <div id="videos">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <div id="remoteContainer"></div>
+  </div>
+
+  <script>
+    // IMPORTANT: change this to your Sendbird APP ID or let Flutter call `initSendbird(APP_ID)` before use.
+    let APP_ID = null;
+
+    function logToFlutter(obj) {
+      // for flutter_inappwebview, callHandler is available when the platform is ready.
+      // Wait for flutterInAppWebViewPlatformReady event on page load where necessary.
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('sendbirdEvent', obj);
+        } else if (window.FlutterChannel && window.FlutterChannel.postMessage) {
+          // fallback for other WebViews (webview_flutter)
+          window.FlutterChannel.postMessage(JSON.stringify(obj));
+        } else {
+          console.log('no flutter channel', obj);
+        }
+      } catch(e) { console.warn(e); }
+    }
+
+    async function initSendbird(appId) {
+      APP_ID = appId || APP_ID || 'DFCAA3BB-88FA-4A32-B155-485942708481';
+      SendBirdCall.init(APP_ID);
+      console.log('SendBirdCall.init done', APP_ID);
+    }
+
+    async function authenticate(userId) {
+      if (!userId) throw new Error('userId required');
+      const authOpt = { userId: userId }; // add accessToken if you use it
+      return new Promise((resolve, reject) => {
+        SendBirdCall.authenticate(authOpt, (res, err) => {
+          if (err) { reject(err); return; }
+          SendBirdCall.connectWebSocket()
+            .then(()=> resolve(res))
+            .catch(reject);
+        });
+      });
+    }
+
+    // request permissions and prepare media
+    async function prepareMedia() {
+      // The SDK recommends calling useMedia which triggers getUserMedia permission.
+      try {
+        await SendBirdCall.useMedia();
+        console.log('useMedia ok');
+      } catch(e) {
+        console.warn('useMedia failed', e);
+      }
+    }
+
+    // create a small video room and register meetingCode (server)
+    async function createRoomAndRegister(meetingCode) {
+      const roomParams = { roomType: SendBirdCall.RoomType.SMALL_ROOM_FOR_VIDEO };
+      const room = await SendBirdCall.createRoom(roomParams);
+      // set the meeting code on the room as a custom item (helps discovery)
+      await room.updateCustomItems({ meeting_code: meetingCode });
+      // POST to your server so other clients can find the room by meeting code
+      await fetch('/register-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingCode, roomId: room.roomId })
+      });
+      logToFlutter({ type: 'roomCreated', roomId: room.roomId, meetingCode });
+      await enterRoom(room.roomId);
+    }
+
+    async function getRoomIdByCode(meetingCode) {
+      const r = await fetch(`/rooms/by-code/${encodeURIComponent(meetingCode)}`);
+      if (!r.ok) throw new Error('no room');
+      return r.json(); // expects { roomId: '...' }
+    }
+
+    async function enterRoom(roomId) {
+      const room = await SendBirdCall.fetchRoomById(roomId);
+      const enterParams = { videoEnabled: true, audioEnabled: true };
+      await room.enter(enterParams);
+      // set local view
+      const localEl = document.getElementById('localVideo');
+      room.localParticipant.setMediaView(localEl);
+
+      // handle remote participants streams
+      room.on('remoteParticipantStreamStarted', (remoteParticipant) => {
+        const remoteEl = document.createElement('video');
+        remoteEl.autoplay = true; remoteEl.playsInline = true;
+        remoteEl.width = 320;
+        document.getElementById('remoteContainer').appendChild(remoteEl);
+        // attach remote participant's media stream to created element
+        remoteParticipant.setMediaView(remoteEl);
+      });
+
+      room.on('participantEntered', (participant) => {
+        console.log('participantEntered', participant.user);
+      });
+
+      room.on('participantExited', (participant) => {
+        console.log('participantExited', participant);
+      });
+
+      room.on('error', (err, participant) => console.error('room error', err, participant));
+      logToFlutter({ type: 'enteredRoom', roomId });
+    }
+
+    // wiring UI
+    document.getElementById('btnInit').onclick = async () => {
+      const userId = document.getElementById('userId').value.trim();
+      const meetingCode = document.getElementById('meetingCode').value.trim();
+      try {
+        // Flutter will call initSendbird(APP_ID) before if you prefer
+        await initSendbird(); 
+        await authenticate(userId);
+        await prepareMedia();
+        logToFlutter({ type: 'authenticated', userId, meetingCode });
+      } catch(e) {
+        console.error(e);
+        logToFlutter({ type: 'error', error: String(e) });
+      }
+    };
+
+    document.getElementById('btnCreate').onclick = async () => {
+      const meetingCode = document.getElementById('meetingCode').value.trim();
+      try { await createRoomAndRegister(meetingCode); } catch(e){ console.error(e); logToFlutter({ type:'error', error:String(e) }) }
+    };
+
+    document.getElementById('btnJoin').onclick = async () => {
+      const meetingCode = document.getElementById('meetingCode').value.trim();
+      try {
+        const data = await getRoomIdByCode(meetingCode);
+        await enterRoom(data.roomId);
+      } catch(e) { console.error(e); logToFlutter({ type:'error', error:String(e) }) }
+    };
+
+    // wait for Flutter platform ready to call handler
+    document.addEventListener('flutterInAppWebViewPlatformReady', function() {
+      console.log('Platform ready for callHandler');
+    });
+  </script>
+</body>
+</html>
