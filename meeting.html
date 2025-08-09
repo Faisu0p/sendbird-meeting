@@ -97,20 +97,26 @@
     }
 
     // create a small video room and register meetingCode (server)
-    async function createRoomAndRegister(meetingCode) {
-      const roomParams = { roomType: SendBirdCall.RoomType.SMALL_ROOM_FOR_VIDEO };
-      const room = await SendBirdCall.createRoom(roomParams);
-      // set the meeting code on the room as a custom item (helps discovery)
-      await room.updateCustomItems({ meeting_code: meetingCode });
-      // POST to your server so other clients can find the room by meeting code
-      await fetch('https://sendbird-server-lc0z5ujnk-faisalkhan786hi-gmailcoms-projects.vercel.app/register-room', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetingCode, roomId: room.roomId })
-      });
-      logToFlutter({ type: 'roomCreated', roomId: room.roomId, meetingCode });
-      await enterRoom(room.roomId);
-    }
+async function createRoomAndRegister(meetingCode) {
+  const roomParams = { roomType: SendBirdCall.RoomType.SMALL_ROOM_FOR_VIDEO };
+  const room = await SendBirdCall.createRoom(roomParams);
+
+  // enter room before updating custom items
+  await enterRoom(room.roomId);
+
+  // update custom items after entering
+  await room.updateCustomItems({ meeting_code: meetingCode });
+
+  // POST to your server so other clients can find the room by meeting code
+  await fetch('https://sendbird-server-lc0z5ujnk-faisalkhan786hi-gmailcoms-projects.vercel.app/register-room', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ meetingCode, roomId: room.roomId })
+  });
+
+  logToFlutter({ type: 'roomCreated', roomId: room.roomId, meetingCode });
+}
+
 
     async function getRoomIdByCode(meetingCode) {
       const r = await fetch(`https://sendbird-server-lc0z5ujnk-faisalkhan786hi-gmailcoms-projects.vercel.app/rooms/by-code/${encodeURIComponent(meetingCode)}`);
